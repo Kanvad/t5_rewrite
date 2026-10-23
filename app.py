@@ -25,14 +25,17 @@ model = AutoModelForSeq2SeqLM.from_pretrained(
 print("Model ready.")
 
 
-def check_and_rewrite(text: str) -> list[tuple[str, str | None]]:
+def check_and_rewrite(
+    text: str,
+) -> tuple[list[tuple[str, str | None]], str]:
     """Check `text` for errors and return the corrected version.
 
-    If no typo / grammatical errors are found the text is
-    returned unchanged.
+    Returns the highlighted spans for display plus the plain corrected
+    text, so the result can be copied without any markup. If no typo /
+    grammatical errors are found the text is returned unchanged.
     """
     if not text or not text.strip():
-        return []
+        return [], ""
     # Correct each non-empty line independently so a list of sentences cannot
     # be merged into a summary by the small seq2seq model.
     lines = text.splitlines()
@@ -78,7 +81,7 @@ def check_and_rewrite(text: str) -> list[tuple[str, str | None]]:
                 (piece, None if piece.isspace() else "")
             )
 
-    return highlighted_text
+    return highlighted_text, corrected_text
 
 
 def main():
@@ -106,16 +109,23 @@ def main():
                     # with an empty label it renders as a bare colored block.
                     show_inline_category=False,
                 )
+                corrected_box = gr.Textbox(
+                    label="Corrected text",
+                    # info="Plain text — use the copy button to copy it.",
+                    lines=6,
+                    interactive=False,
+                    buttons=["copy"],
+                )
 
         submit_btn.click(
             fn=check_and_rewrite,
             inputs=input_box,
-            outputs=output_box,
+            outputs=[output_box, corrected_box],
         )
         clear_btn.click(
-            fn=lambda: ("", []),
+            fn=lambda: ("", [], ""),
             inputs=None,
-            outputs=[input_box, output_box],
+            outputs=[input_box, output_box, corrected_box],
         )
         gr.Examples(
             examples=[
@@ -124,7 +134,7 @@ def main():
                 ["I are happy to seeing you."],
             ],
             inputs=input_box,
-            outputs=output_box,
+            outputs=[output_box, corrected_box],
             fn=check_and_rewrite,
             cache_examples=False,
         )
