@@ -78,7 +78,7 @@ def check_and_rewrite(
         # Never color whitespace: split it out as unhighlighted text.
         for piece in re.findall(r"\s+|\S+", segment):
             highlighted_text.append(
-                (piece, None if piece.isspace() else "")
+                (piece, None if piece.isspace() else "changed")
             )
 
     return highlighted_text, corrected_text
@@ -99,14 +99,15 @@ def main():
                     lines=8,
                 )
                 with gr.Row():
-                    submit_btn = gr.Button("Check & Rewrite")
+                    submit_btn = gr.Button("Check & Rewrite", variant="primary")
                     clear_btn = gr.Button("Clear")
             with gr.Column():
                 output_box = gr.HighlightedText(
                     label="Output text",
                     combine_adjacent=True,
-                    # Don't draw the category badge after each highlighted span:
-                    # with an empty label it renders as a bare colored block.
+                    # A built-in palette name keeps the background fully opaque
+                    color_map={"changed": "yellow"},
+                    # Don't draw the category badge after each highlighted span.
                     show_inline_category=False,
                 )
                 corrected_box = gr.Textbox(
