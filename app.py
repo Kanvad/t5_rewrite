@@ -7,6 +7,7 @@ instructed to return it unchanged (skip).
 
 import torch
 import re
+from difflib import SequenceMatcher
 from transformers import (
     AutoModelForSeq2SeqLM,
     AutoTokenizer,
@@ -24,14 +25,14 @@ model = AutoModelForSeq2SeqLM.from_pretrained(
 print("Model ready.")
 
 
-def check_and_rewrite(text: str) -> str:
+def check_and_rewrite(text: str) -> list[tuple[str, str | None]]:
     """Check `text` for errors and return the corrected version.
 
     If no typo / grammatical errors are found the text is
     returned unchanged.
     """
     if not text or not text.strip():
-        return ""
+        return []
     # Correct each non-empty line independently so a list of sentences cannot
     # be merged into a summary by the small seq2seq model.
     lines = text.splitlines()
@@ -57,7 +58,27 @@ def check_and_rewrite(text: str) -> str:
         ).strip()
         corrected_lines.append(f"{marker}{corrected_text}")
 
-    return "\n".join(corrected_lines)
+    corrected_text = "\n".join(corrected_lines)
+    # Keep whitespace as its own token so a highlighted span never includes
+    # trailing spaces (which would render as an empty colored block).
+    original_tokens = re.findall(r"\s+|\S+", text)
+    corrected_tokens = re.findall(r"\s+|\S+", corrected_text)
+    highlighted_text = []
+
+    matcher = SequenceMatcher(None, original_tokens, corrected_tokens)
+    for tag, _, _, corrected_start, corrected_end in matcher.get_opcodes():
+        segment = "".join(corrected_tokens[corrected_start:corrected_end])
+        if tag == "equal":
+            if segment:
+                highlighted_text.append((segment, None))
+            continue
+        # Never color whitespace: split it out as unhighlighted text.
+        for piece in re.findall(r"\s+|\S+", segment):
+            highlighted_text.append(
+                (piece, None if piece.isspace() else "")
+            )
+
+    return highlighted_text
 
 
 def main():
@@ -78,10 +99,12 @@ def main():
                     submit_btn = gr.Button("Check & Rewrite")
                     clear_btn = gr.Button("Clear")
             with gr.Column():
-                output_box = gr.Textbox(
+                output_box = gr.HighlightedText(
                     label="Output text",
-                    lines=8,
-                    buttons=["copy"],
+                    combine_adjacent=True,
+                    # Don't draw the category badge after each highlighted span:
+                    # with an empty label it renders as a bare colored block.
+                    show_inline_category=False,
                 )
 
         submit_btn.click(
@@ -90,9 +113,9 @@ def main():
             outputs=output_box,
         )
         clear_btn.click(
-            fn=lambda: "",
+            fn=lambda: ("", []),
             inputs=None,
-            outputs=input_box,
+            outputs=[input_box, output_box],
         )
         gr.Examples(
             examples=[
